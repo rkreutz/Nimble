@@ -48,6 +48,43 @@ private let toEventuallyRequiresClosureError = FailureMessage(
         """
 )
 
+private func toNeverPredicate<T>(predicate: Predicate<T>, timeout: TimeInterval, poll: TimeInterval, fnName: String) -> Predicate<T> {
+    return Predicate { actualExpression in
+        let uncachedExpression = actualExpression.withoutCaching()
+        let fnName = "expect(...).\(fnName)(...)"
+        var lastPredicateResult: PredicateResult?
+        let result = pollBlock(
+            pollInterval: poll,
+            timeoutInterval: timeout,
+            file: actualExpression.location.file,
+            line: actualExpression.location.line,
+            fnName: fnName) {
+                lastPredicateResult = try predicate.satisfies(uncachedExpression)
+                return lastPredicateResult!.toBoolean(expectation: .toMatch)
+        }
+        switch result {
+        case .completed:
+            return PredicateResult(
+                status: .fail,
+                message: lastPredicateResult?.message ?? .fail("matched the predicate when it shouldn't have")
+            )
+        case .timedOut:
+            return PredicateResult(status: .doesNotMatch, message: .expectedTo("never match the predicate"))
+        case let .errorThrown(error):
+            return PredicateResult(status: .fail, message: .fail("unexpected error thrown: <\(error)>"))
+        case let .raisedException(exception):
+            return PredicateResult(status: .fail, message: .fail("unexpected exception raised: \(exception)"))
+        case .blockedRunLoop:
+            // swiftlint:disable:next line_length
+            let message = lastPredicateResult?.message.appended(message: " (timed out, but main run loop was unresponsive).") ??
+                .fail("main run loop was unresponsive")
+            return PredicateResult(status: .fail, message: message)
+        case .incomplete:
+            internalError("Reached .incomplete state for \(fnName)(...).")
+        }
+    }
+}
+
 extension Expectation {
     /// Tests the actual value using a matcher to match by checking continuously
     /// at each pollInterval until the timeout is reached.
@@ -105,6 +142,25 @@ extension Expectation {
     /// is executing. Any attempts to touch the run loop may cause non-deterministic behavior.
     public func toNotEventually(_ predicate: Predicate<T>, timeout: TimeInterval = AsyncDefaults.Timeout, pollInterval: TimeInterval = AsyncDefaults.PollInterval, description: String? = nil) {
         return toEventuallyNot(predicate, timeout: timeout, pollInterval: pollInterval, description: description)
+    }
+
+    public func toNever(_ predicate: Predicate<T>, until: TimeInterval = AsyncDefaults.Timeout, pollInterval: TimeInterval = AsyncDefaults.PollInterval, description: String? = nil) {
+        nimblePrecondition(expression.isClosure, "NimbleInternalError", toEventuallyRequiresClosureError.stringValue)
+
+
+        let (pass, msg) = execute(
+            expression,
+            .toNotMatch,
+            toNeverPredicate(predicate: predicate, timeout: until, poll: pollInterval, fnName: "toNever"),
+            to: "to never",
+            description: description,
+            captureExceptions: false
+        )
+        verify(pass, msg)
+    }
+
+    public func neverTo(_ predicate: Predicate<T>, until: TimeInterval = AsyncDefaults.Timeout, pollInterval: TimeInterval = AsyncDefaults.PollInterval, description: String? = nil) {
+        return toNever(predicate, until: until, pollInterval: pollInterval, description: description)
     }
 }
 
