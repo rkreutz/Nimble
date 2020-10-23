@@ -151,7 +151,7 @@ extension Expectation {
     public func toNotEventually(_ predicate: Predicate<T>, timeout: DispatchTimeInterval = AsyncDefaults.timeout, pollInterval: DispatchTimeInterval = AsyncDefaults.pollInterval, description: String? = nil) {
         return toEventuallyNot(predicate, timeout: timeout, pollInterval: pollInterval, description: description)
     }
-
+    
     /// Tests the actual value using a matcher to never match by checking
     /// continuously at each pollInterval until the timeout is reached.
     ///
@@ -160,8 +160,6 @@ extension Expectation {
     /// is executing. Any attempts to touch the run loop may cause non-deterministic behavior.
     public func toNever(_ predicate: Predicate<T>, until: DispatchTimeInterval = AsyncDefaults.timeout, pollInterval: DispatchTimeInterval = AsyncDefaults.pollInterval, description: String? = nil) {
         nimblePrecondition(expression.isClosure, "NimbleInternalError", toEventuallyRequiresClosureError.stringValue)
-
-
         let (pass, msg) = execute(
             expression,
             .toNotMatch,
@@ -172,7 +170,7 @@ extension Expectation {
         )
         verify(pass, msg)
     }
-
+    
     /// Tests the actual value using a matcher to never match by checking
     /// continuously at each pollInterval until the timeout is reached.
     ///
